@@ -449,6 +449,48 @@
       }
     }
 
+    .pagination{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:36px;
+    }
+
+    .page-btn{
+      min-width:40px;
+      height:40px;
+      padding:0 12px;
+      border:1px solid #d7dce3;
+      border-radius:10px;
+      background:#fff;
+      color:#374151;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .page-btn:hover{
+      background:#f3f4f6;
+    }
+
+    .page-btn.active{
+      background:#111827;
+      color:#fff;
+      border-color:#111827;
+    }
+
+    .page-btn:disabled{
+      opacity:.4;
+      cursor:not-allowed;
+    }
+
+    .detail-request-btn:disabled{
+      background:#e5e7eb;
+      color:#6b7280;
+      cursor:not-allowed;
+    }
+
     .detail-page{background:#fff;border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:var(--shadow)}
     .detail-topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:24px}
     .back-btn{border:0;background:#f1f3f5;border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer}
@@ -577,6 +619,7 @@
       </div>
 
       <section id="companyGrid" class="grid"></section>
+      <div id="pagination" class="pagination"></div>
     </section>
 
     <section id="detailView" class="detail-page" hidden></section>
@@ -612,7 +655,7 @@
         <textarea id="reasonInput" placeholder="예: 셀렉한 이유 예시 좀 길게"></textarea>
 
         <div style="height:22px"></div>
-칭
+
         <label class="field-label">우선 매칭?</label>
         <div class="radio-row">
           <label class="radio-item">
@@ -651,7 +694,7 @@
 <script>
 
   const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbwnzyqSGrLWJoVhMzUczYMgZf23kUGkwweYkhsZPzxNUG_NZ9cQPHMVr-RJHUJGHddL/exec";
+  "https://script.google.com/macros/s/AKfycbyDPioBR83Umnsovn2MA4YaWLSWW76e5M2r1aCWWUcDBUxhFs--hmg6Q-Z7fPAgnChE/exec";
 
 /* ============================================================
    1) GOOGLE FORM 연결 설정
@@ -916,11 +959,16 @@ function convertDriveImageUrl(url) {
    ============================================================ */
 
 let cart = [];
+let submittedRequests = [];
+
 let editingCompanyId = null;
 let directoryScrollY = 0;
 
 let currentBuyerCode = "";
 let currentBuyerCompany = "";
+
+let currentPage = 1;
+const ITEMS_PER_PAGE = 15;
 
 function getLocalCartKey(code = currentBuyerCode) {
   return `MeetingList_${code}`;
@@ -1006,6 +1054,11 @@ function enterWithAccessCode(code, autoLogin = false) {
       currentBuyerCode = code;
       currentBuyerCompany =
         data.buyerCompany || "";
+      
+      submittedRequests =
+        Array.isArray(data.submittedRequests)
+          ? data.submittedRequests
+          : [];
 
       localStorage.setItem(
         "BuyerAccessCode",
@@ -1232,7 +1285,10 @@ function initializeFilters() {
 
   document
     .getElementById("searchInput")
-    .addEventListener("input", renderCompanies);
+    .addEventListener("input", () => {
+      currentPage = 1;
+      renderCompanies();
+    });
 
   categoryFilter.addEventListener("change", () => {
 
@@ -1419,20 +1475,55 @@ function getCategoryClass(category) {
   return map[category] || "";
 }
 
-function renderCompanies() {
-  const keyword = document.getElementById("searchInput")?.value.trim().toLowerCase() || "";
-  const category = document.getElementById("categoryFilter")?.value || "";
-  const subcategory = document.getElementById("subcategoryFilter")?.value || "";
+function getFilteredCompanies() {
 
-  const filtered = companies.filter(company => {
+  const keyword =
+    document
+      .getElementById("searchInput")
+      ?.value
+      .trim()
+      .toLowerCase() || "";
 
-    const keywordMatch = !keyword || getCompanySearchText(company).includes(keyword);
-    const categoryMatch = !category || (company.categories?.main || []).includes(category);
-    const subcategoryMatch = !subcategory || (company.categories?.sub || []).includes(subcategory);
+  const category =
+    document
+      .getElementById("categoryFilter")
+      ?.value || "";
 
-    return keywordMatch && categoryMatch && subcategoryMatch;
+  const subcategory =
+    document
+      .getElementById("subcategoryFilter")
+      ?.value || "";
+
+
+  return companies.filter(company => {
+
+    const keywordMatch =
+      !keyword ||
+      getCompanySearchText(company)
+        .includes(keyword);
+
+    const categoryMatch =
+      !category ||
+      (company.categories?.main || [])
+        .includes(category);
+
+    const subcategoryMatch =
+      !subcategory ||
+      (company.categories?.sub || [])
+        .includes(subcategory);
+
+    return (
+      keywordMatch &&
+      categoryMatch &&
+      subcategoryMatch
+    );
   });
+}
 
+function renderCompanies() {
+
+  const filtered =
+  getFilteredCompanies();
   renderActiveFilters();
 
   document.getElementById("resultCount").textContent =
@@ -1446,10 +1537,29 @@ function renderCompanies() {
         No matching companies found.
       </div>
     `;
+
+    document.getElementById("pagination").innerHTML = "";
     return;
   }
 
-  grid.innerHTML = filtered.map(company => {
+  const totalPages =
+    Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
+  if (currentPage > totalPages) {
+    currentPage = 1;
+    renderCompanies();
+  }
+
+  const startIndex =
+    (currentPage - 1) * ITEMS_PER_PAGE;
+
+  const paginatedCompanies =
+    filtered.slice(
+     startIndex,
+      startIndex + ITEMS_PER_PAGE
+    );
+
+  grid.innerHTML = paginatedCompanies.map(company => {
     const productNames = (company.products || [])
       .filter(p => p && p.name)
       .map(p => p.name);
@@ -1484,9 +1594,11 @@ function renderCompanies() {
               .join(`<span class="category-separator"> · </span>`)}
           </div>
 
-          ${cart.some(item => item.companyId === company.id)
-            ? `<span class="meeting-badge">✓ In Meeting List</span>`
-            : ""}
+          ${submittedRequests.some(item => item.companyId === company.id)
+            ? `<span class="meeting-badge">✓ Meeting Requested</span>`
+            : cart.some(item => item.companyId === company.id)
+              ? `<span class="meeting-badge">✓ In Meeting List</span>`
+              : ""}
         </div>
 
 
@@ -1523,6 +1635,107 @@ function renderCompanies() {
       </article>
     `;
   }).join("");
+  renderPagination(totalPages);
+}
+
+function renderPagination(totalPages) {
+
+  const container =
+    document.getElementById("pagination");
+
+  if (totalPages <= 1) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const PAGES_PER_GROUP = 12;
+
+  const currentGroup =
+    Math.floor((currentPage - 1) / PAGES_PER_GROUP);
+
+  const startPage =
+    currentGroup * PAGES_PER_GROUP + 1;
+
+  const endPage =
+    Math.min(
+      startPage + PAGES_PER_GROUP - 1,
+      totalPages
+    );
+
+  let html = "";
+
+
+  // 이전 12페이지 그룹
+  html += `
+    <button
+      class="page-btn"
+      type="button"
+      onclick="goToPage(${startPage - 1})"
+      ${startPage === 1 ? "disabled" : ""}
+    >
+      ‹
+    </button>
+  `;
+
+
+  // 현재 그룹 페이지 번호
+  for (
+    let page = startPage;
+    page <= endPage;
+    page++
+  ) {
+
+    html += `
+      <button
+        class="page-btn ${page === currentPage ? "active" : ""}"
+        type="button"
+        onclick="goToPage(${page})"
+      >
+        ${page}
+      </button>
+    `;
+  }
+
+
+  // 다음 12페이지 그룹
+  html += `
+    <button
+      class="page-btn"
+      type="button"
+      onclick="goToPage(${endPage + 1})"
+      ${endPage === totalPages ? "disabled" : ""}
+    >
+      ›
+    </button>
+  `;
+
+
+  container.innerHTML = html;
+}
+
+function goToPage(page) {
+
+  const totalPages =
+    Math.ceil(
+      getFilteredCompanies().length /
+      ITEMS_PER_PAGE
+    );
+
+  if (
+    page < 1 ||
+    page > totalPages
+  ) {
+    return;
+  }
+
+  currentPage = page;
+
+  renderCompanies();
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
 }
 
 function openCompanyDetail(companyId, addHistory = true) {
@@ -1590,10 +1803,15 @@ function openCompanyDetail(companyId, addHistory = true) {
         class="detail-request-btn"
         type="button"
         onclick='openRequestModal(${JSON.stringify(company.id)})'
+        ${submittedRequests.some(item => item.companyId === company.id)
+            ? "disabled"
+            : ""}
       >
-        ${cart.some(item => item.companyId === company.id)
-          ? "✓ Edit Meeting Request"
-          : "Request Meeting"}
+        ${submittedRequests.some(item => item.companyId === company.id)
+          ? "✓ Meeting Requested"
+          : cart.some(item => item.companyId === company.id)
+            ? "✓ Edit Meeting Request"
+            : "Request Meeting"}
       </button>
     </div>
 
@@ -1729,6 +1947,16 @@ function openRequestModal(companyId) {
   const company = companies.find(c => c.id === companyId);
   if (!company) return;
 
+  const alreadySubmitted =
+    submittedRequests.some(
+      item => item.companyId === companyId
+    );
+
+  if (alreadySubmitted) {
+    alert("This meeting request has already been submitted.");
+    return;
+  }
+
   editingCompanyId = companyId;
 
   const existing = cart.find(item => item.companyId === companyId);
@@ -1773,6 +2001,17 @@ function saveToCart() {
   const company = companies.find(c => c.id === editingCompanyId);
   if (!company) return;
 
+  if (
+  submittedRequests.some(
+    item => item.companyId === company.id
+  )
+) {
+  alert(
+    "This company has already been submitted."
+  );
+  return;
+}
+
   const products = [
     ...document.querySelectorAll('input[name="meetingProduct"]:checked')
   ].map(input => input.value);
@@ -1799,8 +2038,16 @@ function saveToCart() {
 
   const alreadyExists = cart.some(item => item.companyId === company.id);
 
-  if (!alreadyExists && cart.length >= 30) {
-    alert("미팅 신청은 최대 30개 기업까지 가능합니다.");
+  const totalRequestCount =
+    submittedRequests.length + cart.length;
+
+  if (
+    !alreadyExists &&
+    totalRequestCount >= 30
+  ) {
+    alert(
+      "Submitted requests and current meeting requests combined cannot exceed 30 companies."
+    );
     return;
   }
 
@@ -1861,51 +2108,150 @@ function closeCart() {
 function renderCart() {
   const body = document.getElementById("cartBody");
 
-  if (!cart.length) {
-    body.innerHTML = `
-      <div style="text-align:center;padding:40px 10px;color:#6b7280">
-        아직 신청할 기업을 선택하지 않았음 돌아가
-      </div>
-    `;
-    return;
-  }
+  const isFirstSubmission =
+    submittedRequests.length === 0;
 
-  body.innerHTML = `
-    <div>
-      ${cart.map(item => `
+  const totalCount =
+    submittedRequests.length + cart.length;
+
+  const submittedHtml = submittedRequests.length
+  ? `
+    <div style="margin-bottom:28px;">
+      <h3 style="margin:0 0 14px;">
+        Submitted Requests (${submittedRequests.length})
+      </h3>
+
+      ${submittedRequests.map(item => `
         <div class="cart-item">
-          <h4>${escapeHtml(item.companyName)}</h4>
+          <h4>${escapeHtml(item.companyName || "")}</h4>
+
           <div class="cart-meta">
             <b>Products</b><br>
-            ${item.products.map(escapeHtml).join(", ")}
+            ${escapeHtml(
+              item.productText ||
+              (Array.isArray(item.products)
+                ? item.products.join(", ")
+                : "")
+            )}
+
             <br><br>
+
             <b>Reason</b><br>
-            ${escapeHtml(item.reason)}
+            ${escapeHtml(item.reason || "")}
+
             <br><br>
+
             <b>Priority</b><br>
-            ${escapeHtml(item.priority)}
+            ${escapeHtml(item.priority || "")}
           </div>
 
-          <div class="cart-actions">
-            <button class="mini-btn"
-              onclick='editCartItem(${JSON.stringify(item.companyId)})'>
-              Edit
-            </button>
-            <button class="mini-btn remove"
-              onclick='removeCartItem(${JSON.stringify(item.companyId)})'>
-              Remove
-            </button>
+          <div
+            style="
+              display:inline-block;
+              margin-top:12px;
+              padding:6px 10px;
+              border-radius:999px;
+              background:#ecfdf3;
+              color:#15803d;
+              font-size:12px;
+              font-weight:800;
+            "
+          >
+            ✓ Meeting Requested
           </div>
         </div>
       `).join("")}
     </div>
+  `
+  : "";
+
+  const currentHtml = cart.length
+    ? `
+      <div>
+        <h3 style="margin:0 0 14px;">
+          Current Meeting List
+        </h3>
+
+        ${cart.map(item => `
+          <div class="cart-item">
+            <h4>${escapeHtml(item.companyName)}</h4>
+
+            <div class="cart-meta">
+              <b>Products</b><br>
+              ${item.products.map(escapeHtml).join(", ")}
+
+              <br><br>
+
+              <b>Reason</b><br>
+              ${escapeHtml(item.reason)}
+
+              <br><br>
+
+              <b>Priority</b><br>
+              ${escapeHtml(item.priority)}
+            </div>
+
+            <div class="cart-actions">
+              <button
+                class="mini-btn"
+                onclick='editCartItem(${JSON.stringify(item.companyId)})'
+              >
+                Edit
+              </button>
+
+              <button
+                class="mini-btn remove"
+                onclick='removeCartItem(${JSON.stringify(item.companyId)})'
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `
+    : `
+      <div style="text-align:center;padding:24px 10px;color:#6b7280">
+        No new meeting requests added.
+      </div>
+    `;
+
+
+  const noticeText =
+    isFirstSubmission
+      ? (
+          cart.length < 15
+            ? `Please select at least 15 companies. (${cart.length}/15)`
+            : `Ready to submit · ${cart.length} companies selected`
+        )
+      : (
+          `${submittedRequests.length} submitted · ` +
+          `${cart.length} new · ` +
+          `${totalCount}/30 total`
+        );
+
+
+  const submitDisabled =
+    !cart.length ||
+    (isFirstSubmission && cart.length < 15) ||
+    totalCount > 30;
+
+
+  body.innerHTML = `
+    ${submittedHtml}
+
+    ${currentHtml}
 
     <div class="submit-box">
-      <label class="field-label" for="buyerCompanyInput">
-        바이어사명
+      <label
+        class="field-label"
+        for="buyerCompanyInput"
+      >
+        Buyer Company
       </label>
+
       <p class="help">
-        수정 불가, 본인 사명이랑 다를 경우 연락 부탁
+        Your company name is linked to your access code.
       </p>
 
       <input
@@ -1916,21 +2262,23 @@ function renderCart() {
         readonly
       >
 
-      <p id="minimumNotice" class="help" style="margin-top:14px;font-weight:700">
-        ${cart.length < 15
-          ? `최소 15개 기업을 선택해야 제출할 수 있습니다. (${cart.length}/15)`
-          : `제출 가능 · 현재 ${cart.length}개 기업 선택됨`}
+      <p
+        id="minimumNotice"
+        class="help"
+        style="margin-top:14px;font-weight:700"
+      >
+        ${noticeText}
       </p>
 
       <button
         id="finalSubmitBtn"
         class="submit-btn"
         onclick="submitAllRequests()"
-        ${cart.length < 15 ? "disabled" : ""}
+        ${submitDisabled ? "disabled" : ""}
       >
-        ${cart.length < 15
-          ? `Select at least 15 companies (${cart.length}/15)`
-          : `Submit ${cart.length} Meeting Requests`}
+        ${cart.length
+          ? `Submit ${cart.length} New Meeting Request${cart.length > 1 ? "s" : ""}`
+          : "No New Requests"}
       </button>
     </div>
   `;
@@ -1948,6 +2296,50 @@ function removeCartItem(companyId) {
   renderCompanies();
   renderCart();
 }
+
+const submittedHtml = submittedRequests.length
+  ? `
+    <div style="margin-bottom:28px;">
+      <h3 style="margin:0 0 14px;">
+        Submitted Requests
+      </h3>
+
+      ${submittedRequests.map(item => `
+        <div class="cart-item">
+          <h4>${escapeHtml(item.companyName)}</h4>
+
+          <div class="cart-meta">
+            <div>
+              <b>Products:</b>
+              ${escapeHtml(item.productText || "")}
+            </div>
+
+            <div>
+              <b>Reason:</b>
+              ${escapeHtml(item.reason || "")}
+            </div>
+
+            <div>
+              <b>Priority:</b>
+              ${escapeHtml(item.priority || "")}
+            </div>
+          </div>
+
+          <div
+            style="
+              margin-top:10px;
+              font-size:12px;
+              font-weight:800;
+              color:#16a34a;
+            "
+          >
+            ✓ Meeting Requested
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `
+  : "";
 
 /* ============================================================
    7) GOOGLE FORM 직접 POST
@@ -1969,13 +2361,26 @@ async function submitAllRequests() {
     return;
   }
 
-  if (cart.length < 15) {
-    alert(`최소 15개 기업을 선택해야 제출할 수 있습니다. 현재 ${cart.length}개입니다.`);
+  const isFirstSubmission =
+    submittedRequests.length === 0;
+
+  if (
+    isFirstSubmission &&
+    cart.length < 15
+  ) {
+    alert(
+      "For your first submission, please select at least 15 companies."
+    );
     return;
   }
 
-  if (cart.length > 30) {
-    alert("미팅 신청은 최대 30개 기업까지 가능합니다.");
+  const totalRequestCount =
+    submittedRequests.length + cart.length;
+
+  if (totalRequestCount > 30) {
+    alert(
+      "Submitted requests and new meeting requests combined cannot exceed 30 companies."
+    );
     return;
   }
 
@@ -2002,22 +2407,106 @@ async function submitAllRequests() {
   */
 
   setTimeout(() => {
-    document.getElementById("cartBody").innerHTML = `
-      <div class="success">
-        <div class="icon">✓</div>
-        <h2>Meeting requests submitted</h2>
-        <p>
-          ${cart.length}개 기업의 미팅 신청 완료.<br>
-          감사합니다.
-        </p>
-      </div>
-    `;
 
-    cart = [];
-    clearMeetingDraft();
-    updateCartCount();
-    renderCompanies();
-  }, 1300);
+  const justSubmitted = [...cart];
+
+  submittedRequests = [
+    ...submittedRequests,
+    ...justSubmitted.filter(item =>
+      !submittedRequests.some(
+        submitted =>
+          submitted.companyId === item.companyId
+      )
+    )
+  ];
+
+  markCurrentCartAsSubmitted(
+    justSubmitted
+  );
+
+  cart = [];
+
+  localStorage.removeItem(
+    getLocalCartKey()
+  );
+
+  document.getElementById("cartBody").innerHTML = `
+    <div class="success">
+      <div class="icon">✓</div>
+      <h2>Meeting requests submitted</h2>
+      <p>
+        ${justSubmitted.length}개 기업의 미팅 신청 완료.<br>
+        감사합니다.
+      </p>
+    </div>
+  `;
+
+  updateCartCount();
+  renderCompanies();
+
+}, 1300);
+}
+
+function markCurrentCartAsSubmitted(items) {
+
+  if (
+    !currentBuyerCode ||
+    !items.length
+  ) {
+    return;
+  }
+
+  const frameName =
+    `draftSubmitFrame_${Date.now()}`;
+
+  const iframe =
+    document.createElement("iframe");
+
+  iframe.name = frameName;
+  iframe.style.display = "none";
+
+  document
+    .getElementById("hiddenFrames")
+    .appendChild(iframe);
+
+
+  const form =
+    document.createElement("form");
+
+  form.method = "POST";
+  form.action = APPS_SCRIPT_URL;
+  form.target = frameName;
+  form.style.display = "none";
+
+
+  addHiddenField(
+    form,
+    "action",
+    "submit"
+  );
+
+  addHiddenField(
+    form,
+    "code",
+    currentBuyerCode
+  );
+
+  addHiddenField(
+    form,
+    "cart",
+    JSON.stringify(items)
+  );
+
+
+  document.body.appendChild(form);
+
+  form.submit();
+  form.remove();
+
+
+  setTimeout(() => {
+    iframe.remove();
+  }, 10000);
 }
 
 function clearMeetingDraft() {
