@@ -2394,9 +2394,27 @@ async function submitAllRequests() {
     사용자가 Google Form 화면으로 이동하지 않도록 백그라운드 iframe으로 제출함.
   */
 
+  const allRequests = [
+    ...submittedRequests
+  ];
+
+  cart.forEach(item => {
+   const existingIndex =
+      allRequests.findIndex(
+        existing =>
+          existing.companyId === item.companyId
+      );
+
+    if (existingIndex >= 0) {
+      allRequests[existingIndex] = item;
+    } else {
+      allRequests.push(item);
+    }
+  });
+
   submitGoogleFormResponse({
     buyerCompany,
-    items: cart
+    items: allRequests
   });
 
   /*
@@ -2435,8 +2453,8 @@ async function submitAllRequests() {
       <div class="icon">✓</div>
       <h2>Meeting requests submitted</h2>
       <p>
-        ${justSubmitted.length}개 기업의 미팅 신청 완료.<br>
-        감사합니다.
+        ${justSubmitted.length} new meeting request${justSubmitted.length > 1 ? "s" : ""} submitted.<br>
+        Total: ${submittedRequests.length} meeting requests.
       </p>
     </div>
   `;
